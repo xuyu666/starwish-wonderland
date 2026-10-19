@@ -15,14 +15,14 @@ function portraitScreens(stage){
   const portraits=JSON.parse(document.querySelector('#bandPortraits').textContent);
   const people=[['zhi-bass','贝斯 · ZHI'],['de-drums','鼓手 · DE'],['wei-vocal','主唱 · WEI'],['yu-guitar','吉他 · YU']];
   for(let side=0;side<2;side++){
-    const panel=group(stage,side?9:-9,6,-3.3);
+    const panel=group(stage,side?7.3:-7.3,7.4,-3.3);
     box(panel,4.35,5.35,.38,dark);box(panel,4.55,.13,.52,gold,0,2.72,0);box(panel,4.55,.13,.52,gold,0,-2.72,0);
     for(let j=0;j<2;j++){
       const [file,label]=people[side*2+j],x=(j-.5)*2.06;
-      const material=new THREE.MeshBasicMaterial({color:0xffebca});
-      const screen=mesh(panel,new THREE.PlaneGeometry(1.98,3.45),material,x,.2,.22);screen.castShadow=false;
+      const material=new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false});
+      const screen=mesh(panel,new THREE.PlaneGeometry(1.98,3.45),material,x,.2,.22);screen.castShadow=false;screen.name="portrait-"+file;
       const url=portraits[file];
-      loader.load(url,texture=>{texture.colorSpace=THREE.SRGBColorSpace;material.map=texture;material.needsUpdate=true;},undefined,()=>{
+      loader.load(url,texture=>{texture.colorSpace=THREE.SRGBColorSpace;material.map=texture;material.needsUpdate=true;screen.userData.imageReady=true;},undefined,()=>{
         material.color.set(0xf9ad35);screen.userData.imageUnavailable=true;
       });
       textSign(panel,label,x,-1.9,.24,1.95,'#ffd477','#4c2b20');screens.push(screen);

@@ -8,7 +8,7 @@ export function setupSound(toast,getStage,getPaused){
   let request=0,internalPause=false,baseline=0,lastBeat=-1,frequency=null,waveform=null;
   let silentFor=0,silenceNotice=false;
   const defaultSource=media.dataset?.defaultSrc||'',defaultTitle=media.dataset?.defaultTitle||'默认歌曲';
-  let defaultTrack=false,autoStartPending=false;
+  let defaultTrack=false;
   const playingStatus='正在播放本地音乐，乐队跟随音轨律动';
   const currentPlayingStatus=()=>defaultTrack?'正在播放默认歌曲，乐队跟随音轨律动':playingStatus;
   const analysisUnavailable='音频分析不可用，播放器仍可播放';
@@ -38,48 +38,43 @@ export function setupSound(toast,getStage,getPaused){
     synthEnabled=false;if(timer)clearInterval(timer);timer=null;
     if(synthBus)synthBus.gain.value=0;
   }
-  async function playMedia(automatic=false){
-    if(!automatic)autoStartPending=false;
+  async function playMedia(){
     resumeMedia=true;const token=++request;
     if(scenePaused){setStatus('场景已暂停；继续场景后播放音乐');return;}
     try{
       try{ensureContext();}catch{setStatus(analysisUnavailable);}
       if(context?.state==='suspended'&&source){
-        if(automatic){
-          void context.resume().then(()=>{if(token===request&&context.state==='running'){autoStartPending=false;if(!media.paused)setStatus(currentPlayingStatus());}}).catch(()=>{});
-        }else try{await context.resume();}catch{if(token===request){resumeMedia=false;setStatus('请再次点击播放器播放按钮以启用声音');refresh();}return;}
+        try{await context.resume();}catch{if(token===request){resumeMedia=false;setStatus('请再次点击播放器播放按钮以启用声音');refresh();}return;}
       }
       if(token!==request||!performance.loaded||scenePaused||!resumeMedia)return;
       await media.play();
-      if(automatic&&(!source||context.state==='running'))autoStartPending=false;
     }catch(error){
       if(token!==request||!performance.loaded)return;
       resumeMedia=false;
-      autoStartPending=automatic&&defaultTrack&&error.name==='NotAllowedError';
-      setStatus(autoStartPending?'默认歌曲已就绪，点击页面或播放器开始播放':error.name==='NotAllowedError'?'请点击下方播放器的播放按钮，开始本地音乐':defaultTrack?'默认歌曲暂时无法播放，请点击重试或选择本地音乐':'无法播放此文件，请换用包含受支持音轨的 MP4、MP3 或 WAV');
+      setStatus(error.name==='NotAllowedError'?'请点击下方播放器的播放按钮，开始音乐':defaultTrack?'默认歌曲暂时无法播放，请点击重试或选择本地音乐':'无法播放此文件，请换用包含受支持音轨的 MP4、MP3 或 WAV');
       refresh();
     }
   }
   function clearMedia(message='已恢复乐园配乐，点击右上角音乐按钮开启'){
     const shouldPlay=resumeMedia||(!media.paused&&!media.ended);
-    request++;resumeMedia=false;autoStartPending=false;pauseMedia();media.removeAttribute('src');media.load();
+    request++;resumeMedia=false;pauseMedia();media.removeAttribute('src');media.load();
     if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
     performance.loaded=false;performance.active=false;performance.time=0;
     baseline=0;lastBeat=-1;fileInput.value='';name.textContent='尚未选择音乐';
     if(defaultSource){loadDefault(shouldPlay);return;}
     defaultTrack=false;setStatus(message);refresh();
   }
-  function loadDefault(shouldPlay,automatic=false){
-    defaultTrack=true;autoStartPending=automatic;media.src=defaultSource;media.loop=true;media.load();
+  function loadDefault(shouldPlay){
+    defaultTrack=true;media.src=defaultSource;media.loop=true;media.load();
     performance.loaded=true;performance.active=false;performance.time=0;baseline=0;lastBeat=-1;
-    name.textContent=defaultTitle;setStatus('默认歌曲已就绪，点击播放器开始播放');refresh();
-    if(shouldPlay)void playMedia(automatic);
+    name.textContent=defaultTitle;setStatus('默认歌曲已就绪，点击观看演出或播放器开始播放');refresh();
+    if(shouldPlay)void playMedia();
   }
-  function startDefaultOnGesture(event){
-    if(!autoStartPending||!defaultTrack||scenePaused||getPaused())return;
-    if(event.type==='keydown'&&(event.repeat||['Escape','Tab','Shift','Control','Alt','Meta'].includes(event.key)))return;
-    if(event.target?.closest?.('#sound, #musicAudio, #musicFile, #musicClear, #openMusic'))return;
-    void playMedia();
+  async function startShow(){
+    if(performance.loaded){
+      if(resumeMedia||(!media.paused&&!media.ended))return;
+      await playMedia();
+    }else if(!synthEnabled)await button.onclick();
   }
   function tone(frequency,type,length,volume,delay=0){
     const at=context.currentTime+delay,osc=context.createOscillator(),gain=context.createGain();
@@ -114,7 +109,6 @@ export function setupSound(toast,getStage,getPaused){
     step++;
   }
   button.onclick=async()=>{
-    autoStartPending=false;
     if(performance.loaded){
       if(!media.paused||resumeMedia){request++;resumeMedia=false;pauseMedia();setStatus('音乐已暂停');refresh();}
       else await playMedia();
@@ -131,10 +125,9 @@ export function setupSound(toast,getStage,getPaused){
     }catch{toast('当前窗口暂不支持音频');}
     finally{button.disabled=false;refresh();}
   };
-  $('#openMusic').onclick=()=>{autoStartPending=false;if(!dialog.open)dialog.showModal();};
+  $('#openMusic').onclick=()=>{if(!dialog.open)dialog.showModal();};
   $('#musicClear').onclick=()=>{stopSynth();clearMedia();};
   fileInput.onchange=()=>{
-    autoStartPending=false;
     const file=fileInput.files?.[0];if(!file)return;
     const extension=/\.(mp4|m4a|mp3|wav|ogg|webm)$/i.test(file.name);
     const mime=!file.type||/^(audio\/|video\/(mp4|webm)$|application\/octet-stream$)/i.test(file.type);
@@ -154,7 +147,6 @@ export function setupSound(toast,getStage,getPaused){
     else{
       try{
         ensureContext();setStatus(source&&frequency?currentPlayingStatus():analysisUnavailable);
-        if(defaultTrack&&autoStartPending&&context?.state==='suspended')setStatus('默认歌曲已就绪，点击页面或播放器启用声音');
         if(context?.state==='suspended')void context.resume().catch(()=>setStatus('请再次点击播放器播放按钮以启用声音'));
       }catch{setStatus(analysisUnavailable);}
     }
@@ -163,16 +155,14 @@ export function setupSound(toast,getStage,getPaused){
   media.addEventListener('pause',()=>{
     if(internalPause||!media.paused||!performance.loaded){internalPause=false;refresh();return;}
     if(media.error){refresh();return;}
-    request++;resumeMedia=false;autoStartPending=false;
+    request++;resumeMedia=false;
     if(performance.loaded&&!media.ended)setStatus('音乐已暂停');refresh();
   });
-  media.addEventListener('ended',()=>{request++;resumeMedia=false;autoStartPending=false;setStatus('音乐已播放完毕，可点击播放重听或选择新文件');refresh();});
-  media.addEventListener('pointerdown',()=>{autoStartPending=false;});
-  media.addEventListener('keydown',()=>{autoStartPending=false;});
+  media.addEventListener('ended',()=>{request++;resumeMedia=false;setStatus('音乐已播放完毕，可点击播放重听或选择新文件');refresh();});
   media.addEventListener('volumechange',refresh);
   media.addEventListener('error',()=>{
     if(!performance.loaded)return;
-    request++;resumeMedia=false;autoStartPending=false;pauseMedia();
+    request++;resumeMedia=false;pauseMedia();
     setStatus(defaultTrack?'默认歌曲暂时无法读取，请点击重试或选择本地音乐':'无法读取音轨：MP4 需包含浏览器支持的音频。请换用 MP3、WAV 或其他文件');refresh();
   });
   function syncPause(paused){
@@ -221,9 +211,7 @@ export function setupSound(toast,getStage,getPaused){
     performance.beat*=Math.exp(-dt*8);
     if(meter){const value=performance.active?performance.level:0;meter.value=value;meter.setAttribute('aria-valuenow',value.toFixed(3));}
   }
-  document.addEventListener?.('pointerdown',startDefaultOnGesture);
-  document.addEventListener?.('keydown',startDefaultOnGesture);
-  window.addEventListener('beforeunload',()=>{request++;autoStartPending=false;document.removeEventListener?.('pointerdown',startDefaultOnGesture);document.removeEventListener?.('keydown',startDefaultOnGesture);stopSynth();pauseMedia();media.removeAttribute('src');media.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;});
-  if(defaultSource)loadDefault(true,true);
-  refresh();return {performance,update,syncPause};
+  window.addEventListener('beforeunload',()=>{request++;stopSynth();pauseMedia();media.removeAttribute('src');media.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;});
+  if(defaultSource)loadDefault(false);
+  refresh();return {performance,update,syncPause,startShow};
 }

@@ -18,14 +18,25 @@ function segment(mesh,a,b,length){
   mesh.position.copy(start).add(end).multiplyScalar(.5);
   mesh.scale.y=direction.length()/length;mesh.quaternion.setFromUnitVectors(up,direction.normalize());
 }
+function jump(role,clock,energy){
+  const at=wrap(clock)-({vocal:5,guitar:9,bass:21})[role],strength=Math.min(1,energy*5);
+  if(at<0||at>2.4||strength===0)return {height:0,crouch:0,tuck:0};
+  if(at<.5)return {height:0,crouch:Math.sin(at/.5*Math.PI)*.18*strength,tuck:0};
+  if(at<1.6){
+    const flight=(at-.5)/1.1,arc=4*flight*(1-flight);
+    return {height:arc*.43*strength,crouch:0,tuck:Math.sin(flight*Math.PI)*.055*strength};
+  }
+  return {height:0,crouch:Math.sin((at-1.6)/.8*Math.PI)*.15*strength,tuck:0};
+}
 function walk(member,clock,moving,energy){
   const step=Math.floor(clock),fraction=clock-step,f=smooth(fraction),from=route(member.role,step),to=route(member.role,step+1);
   const x=moving?(from.x+(to.x-from.x)*f):0,z=moving?(from.z+(to.z-from.z)*f):0;
-  member.root.position.set(member.home.x+x,member.home.y,member.home.z+z);
-  member.body.position.y=1.8+Math.sin(fraction*Math.PI)**2*.018*energy;
+  const leap=jump(member.role,clock,energy);
+  member.root.position.set(member.home.x+x,member.home.y+leap.height,member.home.z+z);
+  member.body.position.y=1.8+Math.sin(fraction*Math.PI)**2*.018*energy-leap.crouch;
   for(const leg of member.legs){
     const swings=(step%2===0?1:-1)===leg.side,previous=route(member.role,step-1);
-    const distance=Math.hypot(to.x-previous.x,to.z-previous.z),lift=moving&&swings?Math.sin(fraction*Math.PI)*Math.min(.19,distance*.38):0;
+    const distance=Math.hypot(to.x-previous.x,to.z-previous.z),lift=(moving&&swings?Math.sin(fraction*Math.PI)*Math.min(.19,distance*.38):0)+leap.tuck;
     const fx=moving?(swings?previous.x+(to.x-previous.x)*f:from.x):0;
     const fz=moving?(swings?previous.z+(to.z-previous.z)*f:from.z):0;
     leg.foot.position.set(leg.side*.32+fx-x,lift,.14+fz-z);
@@ -34,6 +45,14 @@ function walk(member,clock,moving,energy){
     const knee=[(hip[0]+ankle[0])*.5,(hip[1]+ankle[1])*.5,.09+(hip[2]+ankle[2])*.5+lift*.65];
     segment(leg.thigh,hip,knee,leg.thighLength);segment(leg.shin,knee,ankle,leg.shinLength);
   }
+}
+function cheer(beat,first,last){
+  return smooth(clamp((beat-first)/.8))*smooth(clamp((last-beat)/.8));
+}
+function reach(arm,gesture){
+  const extension=1+gesture*.34;
+  arm.userData.shoulder.scale.setScalar(extension);
+  arm.userData.hand.scale.setScalar(1/extension);
 }
 function envelope(beat,first,last){
   if(beat<first||beat>last)return 0;
@@ -44,7 +63,7 @@ function pose(member,index,time,clock,signal){
   const accent=Math.cos(clock*Math.PI*2)*(.025*beat+.012*bass);
   member.body.rotation.set(0,Math.sin(time*.75+index)*.09*energy,Math.sin(phase)*.045*sway);
   member.head.rotation.set(Math.sin(phase*1.1)*.065*sway,Math.sin(clock*.4+index)*.075*mid,Math.sin(phase*.65)*.045*mid);
-  for(const a of member.arms){a.rotation.set(0,0,0);a.userData.shoulder.rotation.set(0,0,0);}
+  for(const a of member.arms){a.rotation.set(0,0,0);a.userData.shoulder.rotation.set(0,0,0);reach(a,0);}
   if(energy===0&&beat===0){member.body.rotation.set(0,0,0);member.head.rotation.set(0,0,0);if(member.role==='vocal')member.mouth.scale.y=.18;return;}
   if(member.role==='drums'){
     const fill=envelope(phrase,12,16)+envelope(phrase,28,32);
@@ -58,17 +77,23 @@ function pose(member,index,time,clock,signal){
   }
   member.body.rotation.x=accent;
   if(member.role==='vocal'){
-    const gesture=envelope(phrase,2,8)+envelope(phrase,18,24);
+    const gesture=(cheer(phrase,2,8)+cheer(phrase,18,24))*Math.min(1,energy*5);
     member.arms[0].rotation.x=Math.sin(phase)*.025*level;
-    member.arms[1].userData.shoulder.rotation.z=-gesture*.85*mid;
-    member.arms[1].userData.shoulder.rotation.x=-gesture*.3*level;
-    member.arms[1].rotation.x=Math.sin(clock*Math.PI)*.14*level-gesture*.3*mid;
+    member.arms[0].userData.shoulder.rotation.y=-gesture*.12;
+    member.arms[1].userData.shoulder.rotation.z=gesture*(2.98+Math.sin(clock*Math.PI*1.5)*.24);
+    member.arms[1].userData.shoulder.rotation.x=gesture*(.1+Math.sin(clock*Math.PI)*.1);
+    member.arms[1].rotation.x=Math.sin(clock*Math.PI)*.08*level;
+    reach(member.arms[1],gesture);
     member.head.rotation.y+=Math.sin(clock*.28)*.1*level;
     member.mouth.scale.y=.18+level*1.55;
   }else{
     const solo=member.role==='guitar'?envelope(phrase,8,16):envelope(phrase,20,28);
     const strum=Math.max(mid,high*.7),speed=member.role==='guitar'?4:2;
-    member.arms[0].rotation.x=Math.sin(clock*Math.PI*speed)*(.1*strum+.035*beat);
+    const gesture=cheer(phrase,member.role==='guitar'?8:20,member.role==='guitar'?12:24)*Math.min(1,energy*5);
+    member.arms[0].rotation.x=Math.sin(clock*Math.PI*speed)*(.1*strum+.035*beat)*(1-gesture);
+    member.arms[0].userData.shoulder.rotation.x=-gesture*.61;
+    member.arms[0].userData.shoulder.rotation.z=gesture*(2.85+Math.sin(clock*Math.PI*1.5)*.24);
+    reach(member.arms[0],gesture);
     member.arms[1].rotation.x=Math.sin(clock*Math.PI+1)*.045*mid;
     member.body.rotation.x-=solo*.11*energy;
     member.body.rotation.y+=(member.role==='guitar'?-.2:.16)*solo*energy;
