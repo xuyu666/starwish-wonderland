@@ -15,7 +15,7 @@ const zones=[
   {id:'carousel',name:'梦幻木马',symbol:'♞',x:-24,z:4,color:'#f187b5',description:'十二匹小马，转动一场粉金色的梦。'},
   {id:'swing',name:'云端飞椅',symbol:'✥',x:24,z:5,color:'#29bbb9',description:'双脚离地，和清风一起飞向天空。'},
   {id:'wheel',name:'星愿摩天轮',symbol:'☸',x:34,z:-24,color:'#eaa139',description:'慢慢升高，把整座奇境装进眼睛。'},
-  {id:'harbor',name:'海盗港湾',symbol:'⚓',x:-35,z:-25,color:'#559eaa',description:'扬起风帆，去发现另一片神秘海岸。'},
+  {id:'harbor',name:'海盗港湾',symbol:'⚓',x:-35,z:-25,color:'#559eaa',description:'登上摇摆海盗船，随风帆一起荡向港湾。'},
   {id:'candy-town',name:'糖果小镇',symbol:'♧',x:-30,z:29,color:'#d869a3',description:'蛋糕屋顶与棒棒糖，甜蜜沿街发生。'},
   {id:'sunset-stage',name:'盛夏日落舞台',symbol:'♫',x:-46,z:-4,color:'#ee9c26',description:'四人乐队，在金色太阳下热烈开唱。'},
   {id:'teacups',name:'星际花园',symbol:'♧',x:28,z:30,color:'#8065c5',description:'坐进星际茶杯，围着复古火箭打转。'}
@@ -30,11 +30,12 @@ async function boot(){
   const rim=new THREE.DirectionalLight(0xffa1cb,1.1);rim.position.set(25,35,-45);scene.add(rim);
   const world=new THREE.Group();scene.add(world);
   const environment=buildEnvironment(world),architecture=buildArchitecture(world),rides=buildRides(world),stage=buildSunsetStage(world);
+  Object.assign(rides.seats,architecture.seats);
   const nav=createNavigation(camera,canvas,environment.avatar,toast);
   const atmosphere=createAtmosphere(scene,world),fireworks=createFireworks(scene);
   let selected=zones[0],paused=matchMedia('(prefers-reduced-motion: reduce)').matches,time=0,theme='day';
   $('#pause').textContent=paused?'▶':'Ⅱ';
-  function select(zone){selected=zone;nav.visit(zone);$('#zoneTitle').textContent=zone.name;$('#zoneDescription').textContent=zone.description;$('#zoneNumber').textContent=zone.symbol;$('#ride').hidden=!rides.seats[zone.id];$('#watchShow').hidden=zone.id!=='sunset-stage';document.body.classList.toggle('at-stage',zone.id==='sunset-stage');document.querySelectorAll('#destinations button').forEach(b=>{b.classList.toggle('active',b.dataset.zone===zone.id);b.setAttribute('aria-pressed',String(b.dataset.zone===zone.id));});toast('已抵达 '+zone.name);}
+  function select(zone){selected=zone;nav.visit(zone);$('#zoneTitle').textContent=zone.name;$('#zoneDescription').textContent=zone.description;$('#zoneNumber').textContent=zone.symbol;$('#ride').hidden=!rides.seats[zone.id];$('#watchShow').hidden=zone.id!=='sunset-stage';document.body.classList.toggle('at-stage',zone.id==='sunset-stage');document.body.classList.toggle('at-harbor',zone.id==='harbor');document.querySelectorAll('#destinations button').forEach(b=>{b.classList.toggle('active',b.dataset.zone===zone.id);b.setAttribute('aria-pressed',String(b.dataset.zone===zone.id));});toast('已抵达 '+zone.name);}
   zones.forEach((zone,i)=>{const b=document.createElement('button');b.dataset.zone=zone.id;b.innerHTML=`<span class="nav-symbol">${zone.symbol}</span>${zone.name}`;b.className=i===0?'active':'';b.setAttribute('aria-pressed',String(i===0));b.onclick=()=>select(zone);$('#destinations').append(b);});
   $('#ride').onclick=()=>nav.ride(selected.id);
   $('#watchShow').onclick=()=>{nav.watchStage();toast('前排观演 · 拖拽换角度，滚轮看细节');};

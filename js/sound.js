@@ -7,7 +7,10 @@ export function setupSound(toast,getStage,getPaused){
   let objectURL=null,scenePaused=Boolean(getPaused()),resumeMedia=false,synthEnabled=false;
   let request=0,internalPause=false,baseline=0,lastBeat=-1,frequency=null,waveform=null;
   let silentFor=0,silenceNotice=false;
+  const defaultSource=media.dataset?.defaultSrc||'',defaultTitle=media.dataset?.defaultTitle||'默认歌曲';
+  let defaultTrack=false,autoStartPending=false;
   const playingStatus='正在播放本地音乐，乐队跟随音轨律动';
+  const currentPlayingStatus=()=>defaultTrack?'正在播放默认歌曲，乐队跟随音轨律动':playingStatus;
   const analysisUnavailable='音频分析不可用，播放器仍可播放';
   const clamp=value=>Math.max(0,Math.min(1,value));
   function setStatus(message){status.textContent=message;silentFor=0;silenceNotice=false;}
@@ -16,7 +19,7 @@ export function setupSound(toast,getStage,getPaused){
     button.textContent=playing?'♪':'♫';
     button.setAttribute('aria-label',playing?'暂停音乐':'播放音乐');
     button.setAttribute('aria-pressed',String(playing));
-    button.title=performance.loaded?(media.muted||media.volume===0?'本地音乐已静音':playing?'暂停本地音乐':'播放本地音乐'):'乐园配乐';
+    button.title=performance.loaded?(media.muted||media.volume===0?'音乐已静音':playing?'暂停音乐':'播放音乐'):'乐园配乐';
   }
   function ensureContext(){
     if(!context){
@@ -35,29 +38,48 @@ export function setupSound(toast,getStage,getPaused){
     synthEnabled=false;if(timer)clearInterval(timer);timer=null;
     if(synthBus)synthBus.gain.value=0;
   }
-  async function playMedia(){
+  async function playMedia(automatic=false){
+    if(!automatic)autoStartPending=false;
     resumeMedia=true;const token=++request;
     if(scenePaused){setStatus('场景已暂停；继续场景后播放音乐');return;}
     try{
       try{ensureContext();}catch{setStatus(analysisUnavailable);}
       if(context?.state==='suspended'&&source){
-        try{await context.resume();}catch{if(token===request){resumeMedia=false;setStatus('请再次点击播放器播放按钮以启用声音');refresh();}return;}
+        if(automatic){
+          void context.resume().then(()=>{if(token===request&&context.state==='running'){autoStartPending=false;if(!media.paused)setStatus(currentPlayingStatus());}}).catch(()=>{});
+        }else try{await context.resume();}catch{if(token===request){resumeMedia=false;setStatus('请再次点击播放器播放按钮以启用声音');refresh();}return;}
       }
       if(token!==request||!performance.loaded||scenePaused||!resumeMedia)return;
       await media.play();
+      if(automatic&&(!source||context.state==='running'))autoStartPending=false;
     }catch(error){
       if(token!==request||!performance.loaded)return;
       resumeMedia=false;
-      setStatus(error.name==='NotAllowedError'?'请点击下方播放器的播放按钮，开始本地音乐':'无法播放此文件，请换用包含受支持音轨的 MP4、MP3 或 WAV');
+      autoStartPending=automatic&&defaultTrack&&error.name==='NotAllowedError';
+      setStatus(autoStartPending?'默认歌曲已就绪，点击页面或播放器开始播放':error.name==='NotAllowedError'?'请点击下方播放器的播放按钮，开始本地音乐':defaultTrack?'默认歌曲暂时无法播放，请点击重试或选择本地音乐':'无法播放此文件，请换用包含受支持音轨的 MP4、MP3 或 WAV');
       refresh();
     }
   }
   function clearMedia(message='已恢复乐园配乐，点击右上角音乐按钮开启'){
-    request++;resumeMedia=false;pauseMedia();media.removeAttribute('src');media.load();
+    const shouldPlay=resumeMedia||(!media.paused&&!media.ended);
+    request++;resumeMedia=false;autoStartPending=false;pauseMedia();media.removeAttribute('src');media.load();
     if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;
     performance.loaded=false;performance.active=false;performance.time=0;
     baseline=0;lastBeat=-1;fileInput.value='';name.textContent='尚未选择音乐';
-    setStatus(message);refresh();
+    if(defaultSource){loadDefault(shouldPlay);return;}
+    defaultTrack=false;setStatus(message);refresh();
+  }
+  function loadDefault(shouldPlay,automatic=false){
+    defaultTrack=true;autoStartPending=automatic;media.src=defaultSource;media.loop=true;media.load();
+    performance.loaded=true;performance.active=false;performance.time=0;baseline=0;lastBeat=-1;
+    name.textContent=defaultTitle;setStatus('默认歌曲已就绪，点击播放器开始播放');refresh();
+    if(shouldPlay)void playMedia(automatic);
+  }
+  function startDefaultOnGesture(event){
+    if(!autoStartPending||!defaultTrack||scenePaused||getPaused())return;
+    if(event.type==='keydown'&&(event.repeat||['Escape','Tab','Shift','Control','Alt','Meta'].includes(event.key)))return;
+    if(event.target?.closest?.('#sound, #musicAudio, #musicFile, #musicClear, #openMusic'))return;
+    void playMedia();
   }
   function tone(frequency,type,length,volume,delay=0){
     const at=context.currentTime+delay,osc=context.createOscillator(),gain=context.createGain();
@@ -92,6 +114,7 @@ export function setupSound(toast,getStage,getPaused){
     step++;
   }
   button.onclick=async()=>{
+    autoStartPending=false;
     if(performance.loaded){
       if(!media.paused||resumeMedia){request++;resumeMedia=false;pauseMedia();setStatus('音乐已暂停');refresh();}
       else await playMedia();
@@ -108,16 +131,17 @@ export function setupSound(toast,getStage,getPaused){
     }catch{toast('当前窗口暂不支持音频');}
     finally{button.disabled=false;refresh();}
   };
-  $('#openMusic').onclick=()=>{if(!dialog.open)dialog.showModal();};
+  $('#openMusic').onclick=()=>{autoStartPending=false;if(!dialog.open)dialog.showModal();};
   $('#musicClear').onclick=()=>{stopSynth();clearMedia();};
   fileInput.onchange=()=>{
+    autoStartPending=false;
     const file=fileInput.files?.[0];if(!file)return;
     const extension=/\.(mp4|m4a|mp3|wav|ogg|webm)$/i.test(file.name);
     const mime=!file.type||/^(audio\/|video\/(mp4|webm)$|application\/octet-stream$)/i.test(file.type);
     if(!extension||!mime||file.size===0||file.size>300*1024*1024){
       fileInput.value='';setStatus('请选择有效的 MP4、M4A、MP3、WAV、OGG 或 WebM，大小不超过 300 MB');return;
     }
-    request++;resumeMedia=false;pauseMedia();stopSynth();
+    request++;resumeMedia=false;defaultTrack=false;media.loop=false;pauseMedia();stopSynth();
     const previousURL=objectURL;objectURL=URL.createObjectURL(file);media.src=objectURL;media.load();
     if(previousURL)URL.revokeObjectURL(previousURL);
     performance.loaded=true;performance.active=false;performance.time=0;baseline=0;lastBeat=-1;
@@ -129,7 +153,8 @@ export function setupSound(toast,getStage,getPaused){
     if(scenePaused||getPaused()){scenePaused=true;pauseMedia();setStatus('场景已暂停；继续场景后播放音乐');}
     else{
       try{
-        ensureContext();setStatus(source&&frequency?playingStatus:analysisUnavailable);
+        ensureContext();setStatus(source&&frequency?currentPlayingStatus():analysisUnavailable);
+        if(defaultTrack&&autoStartPending&&context?.state==='suspended')setStatus('默认歌曲已就绪，点击页面或播放器启用声音');
         if(context?.state==='suspended')void context.resume().catch(()=>setStatus('请再次点击播放器播放按钮以启用声音'));
       }catch{setStatus(analysisUnavailable);}
     }
@@ -138,15 +163,17 @@ export function setupSound(toast,getStage,getPaused){
   media.addEventListener('pause',()=>{
     if(internalPause||!media.paused||!performance.loaded){internalPause=false;refresh();return;}
     if(media.error){refresh();return;}
-    request++;resumeMedia=false;
+    request++;resumeMedia=false;autoStartPending=false;
     if(performance.loaded&&!media.ended)setStatus('音乐已暂停');refresh();
   });
-  media.addEventListener('ended',()=>{request++;resumeMedia=false;setStatus('音乐已播放完毕，可点击播放重听或选择新文件');refresh();});
+  media.addEventListener('ended',()=>{request++;resumeMedia=false;autoStartPending=false;setStatus('音乐已播放完毕，可点击播放重听或选择新文件');refresh();});
+  media.addEventListener('pointerdown',()=>{autoStartPending=false;});
+  media.addEventListener('keydown',()=>{autoStartPending=false;});
   media.addEventListener('volumechange',refresh);
   media.addEventListener('error',()=>{
     if(!performance.loaded)return;
-    request++;resumeMedia=false;pauseMedia();
-    setStatus('无法读取音轨：MP4 需包含浏览器支持的音频。请换用 MP3、WAV 或其他文件');refresh();
+    request++;resumeMedia=false;autoStartPending=false;pauseMedia();
+    setStatus(defaultTrack?'默认歌曲暂时无法读取，请点击重试或选择本地音乐':'无法读取音轨：MP4 需包含浏览器支持的音频。请换用 MP3、WAV 或其他文件');refresh();
   });
   function syncPause(paused){
     paused=Boolean(paused);if(paused===scenePaused)return;scenePaused=paused;
@@ -182,11 +209,11 @@ export function setupSound(toast,getStage,getPaused){
     if(performance.active)performance.phase+=dt*(1+performance.beat*2);
     if(eligible&&level<=.005){
       silentFor+=dt;
-      if(silentFor>=3&&!silenceNotice&&status.textContent===playingStatus){
+      if(silentFor>=3&&!silenceNotice&&status.textContent===currentPlayingStatus()){
         setStatus('暂未检测到声音，可能是静音片段；请检查音量或音轨');silenceNotice=true;
       }
     }else{
-      silentFor=0;if(eligible&&silenceNotice)setStatus(playingStatus);
+      silentFor=0;if(eligible&&silenceNotice)setStatus(currentPlayingStatus());
     }
     for(const [key,target] of [['level',level],['bass',bass],['mid',mid],['high',high]]){
       performance[key]+=(target-performance[key])*(1-Math.exp(-dt*(target>performance[key]?18:7)));
@@ -194,6 +221,9 @@ export function setupSound(toast,getStage,getPaused){
     performance.beat*=Math.exp(-dt*8);
     if(meter){const value=performance.active?performance.level:0;meter.value=value;meter.setAttribute('aria-valuenow',value.toFixed(3));}
   }
-  window.addEventListener('beforeunload',()=>{request++;stopSynth();pauseMedia();media.removeAttribute('src');media.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;});
+  document.addEventListener?.('pointerdown',startDefaultOnGesture);
+  document.addEventListener?.('keydown',startDefaultOnGesture);
+  window.addEventListener('beforeunload',()=>{request++;autoStartPending=false;document.removeEventListener?.('pointerdown',startDefaultOnGesture);document.removeEventListener?.('keydown',startDefaultOnGesture);stopSynth();pauseMedia();media.removeAttribute('src');media.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;});
+  if(defaultSource)loadDefault(true,true);
   refresh();return {performance,update,syncPause};
 }

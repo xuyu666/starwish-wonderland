@@ -103,11 +103,30 @@ function harbor(world) {
   const root = group(world, -35, 0, -25);
   const water = cylinder(root, 13, 13.5, .24, '#26bfd1', 0, .17, 0, 64); water.scale.z = .78;
   const edge = torus(root, 13.25, .28, '#f5d09b', 0, .25, 0); edge.rotation.x = Math.PI / 2; edge.scale.y = .78;
-  const ship = group(root, -.8, .65, 0); ship.rotation.y = -.32;
+  const rig=group(root,-.8,0,0);rig.rotation.y=-.32;
+  const supports=group(rig);supports.name='pirate-ship-supports';
+  for(const z of [-3.5,3.5]){
+    for(const x of [-9.2,9.2]){
+      cylinder(supports,.8,.9,.45,C.cream,x,.5,z,16);
+      beam(supports,[x,.7,z],[0,16.8,z],.24,C.teal);
+      beam(supports,[x,.7,z],[0,16.8,z],.075,C.gold);
+    }
+    sphere(supports,.55,C.gold,0,16.8,z);
+  }
+  beam(supports,[0,16.8,-4],[0,16.8,4],.32,C.gold);
+  const pivot=group(rig,0,16.8,0);pivot.name='pirate-ship-pivot';
+  const ship=group(pivot,0,-14.5,0);ship.name='pirate-ship';
+  for(const z of [-2.25,2.25])for(const x of [-4,4])beam(ship,[x,3.45,z],[0,14.5,z],.075,C.gold);
   const hullShape = new THREE.Shape(); hullShape.moveTo(-6, 0); hullShape.quadraticCurveTo(-4.5, -2, 0, -2); hullShape.quadraticCurveTo(5, -2, 6.3, .9); hullShape.lineTo(4.9, 1.25); hullShape.lineTo(-5.1, 1.15); hullShape.closePath();
   const hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: .35, bevelSize: .3, bevelSegments: 2, steps: 1 });
   mesh(ship, hullGeo, mat('#8f432d'), 0, 2.05, -1.75);
   box(ship, 10.3, .22, 3.7, '#d7a466', -.2, 3.25, 0);
+  for(const x of [-.7,3]){
+    box(ship,.8,.24,2.85,C.teal,x,3.65,0);
+    box(ship,.18,.85,2.85,C.teal,x-.35,4.06,0);
+    for(const z of [-1.42,1.42])beam(ship,[x+.5,3.5,z],[x+.5,4.25,z],.055,C.gold);
+    beam(ship,[x+.5,4.25,-1.42],[x+.5,4.25,1.42],.065,C.gold);
+  }
   for (const z of [-1.9,1.9]) {
     beam(ship, [-5.1,3.5,z], [5.1,3.7,z], .1, C.gold);
     beam(ship, [-5.1,4.2,z], [5.1,4.4,z], .1, '#70452c');
@@ -120,7 +139,7 @@ function harbor(world) {
   box(ship, 2.6, 1.65, 3, '#bc6e3e', -3.5, 4.05, 0);
   box(ship, 2.9, .2, 3.3, C.gold, -3.5, 4.95, 0);
   window(ship, -3.5, 3.7, 1.53, .85, 1.1);
-  for (const [x, h, w] of [[-2.6,10,4.2],[1.5,12,5.3]]) {
+  for (const [x, h, w] of [[-2.6,7.2,4.2],[1.5,9,5.3]]) {
     cylinder(ship, .13, .19, h, '#754830', x, h / 2 + 3.4, 0, 12);
     beam(ship, [x-w/2, h*.57+3.4, 0], [x+w/2,h*.57+3.4,0], .09, '#754830');
     beam(ship, [x-w*.4,h*.9+3.4,0], [x+w*.4,h*.9+3.4,0], .075, '#754830');
@@ -156,7 +175,11 @@ function harbor(world) {
     for (const y of [.8,1.3]) cylinder(root,.59,.59,.08,'#493941',x,y,z,12);
   }
   textSign(root,'星湾海盗港',0,2.7,9.5,6,'#593a42','#ffe4ac');
-  register('harbor','星湾海盗港','pirate',root,{description:'扬起弧面风帆的双桅海盗船、红白灯塔和木栈桥停靠在碧蓝港湾。'});
+  register('harbor','星湾海盗港','pirate',root,{description:'金色悬架支撑双桅海盗船往返摆荡，登上甲板感受港湾在脚下起伏。'});
+  return {update(t){pivot.rotation.z=Math.sin(t*.8)*.4;},seat(){
+    ship.updateWorldMatrix(true,false);
+    return {position:ship.localToWorld(new THREE.Vector3(2.8,4.65,.8)),target:ship.localToWorld(new THREE.Vector3(9,4.65,.8)),up:new THREE.Vector3(0,1,0).transformDirection(ship.matrixWorld)};
+  }};
 }
 
 function candyShop(parent, x, z, index) {
@@ -258,8 +281,9 @@ function entrance(world) {
 }
 
 export function buildArchitecture(world) {
-  castle(world); harbor(world); candyTown(world); entrance(world);
-  return { update(t) {
+  castle(world); const pirate=harbor(world); candyTown(world); entrance(world);
+  return { seats:{harbor:pirate.seat},update(t) {
+    pirate.update(t);
     for(const item of animated) {
       if(item.type==='flag') item.item.rotation.y=Math.sin(t*2.5+item.phase)*.14;
       else if(item.type==='sweet') item.item.rotation.z=t*.25+item.phase;

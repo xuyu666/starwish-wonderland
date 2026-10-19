@@ -1,4 +1,5 @@
 import {THREE,group,mesh,box,sphere,cylinder,beam,torus,mat,register} from './kit.js';
+import {updateChoreography} from './band-choreography.js';
 
 const C={skin:'#f4c9ad',hair:'#4b2c24',dark:'#201a25',silver:mat('#d7e2eb',.8,.23),white:'#fff5df',gold:mat('#dca34c',.82,.27)};
 const sparkle=mat('#fff1d4',.8,.18), eye=mat('#2e211e',.05,.2);
@@ -62,7 +63,7 @@ function arm(p,side,color,pose){
   beam(a,[0,0,0],elbow,.16,color);oval(a,0,0,0,.18,.19,.18,color);
   const fore=group(a,...elbow);beam(fore,[0,0,0],end,.12,color);
   const cuff=cylinder(fore,.125,.14,.11,C.silver,...end);cuff.rotation.z=.2;
-  hand(fore,...end);return fore;
+  fore.userData.hand=hand(fore,...end);fore.userData.shoulder=a;return fore;
 }
 function clothes(p,color,vocal,bass){
   cylinder(p,.43,.39,1.05,C.white,0,2.38,0);
@@ -84,16 +85,21 @@ function clothes(p,color,vocal,bass){
   if(bass)for(let i=0;i<7;i++)torus(p,.025,.009,C.silver,.36+i*.018,1.92-Math.sin(i/6*Math.PI)*.19,.25);
 }
 function legs(p,vocal,seated){
+  const rig=[];
   if(seated)oval(p,0,1.12,.06,.4,.18,.31,C.silver);
   for(const s of [-1,1]){
     const x=s*.245;
     if(seated){beam(p,[x,1.1,0],[s*.6,.82,.65],.21,C.silver);beam(p,[s*.6,.82,.65],[s*.65,.25,.8],.19,C.silver);}
-    else beam(p,[x,1.8,0],[s*.32,.32,.08],vocal?.135:.205,vocal?C.skin:C.silver);
+    const thigh=seated?null:beam(p,[x,1.8,0],[s*.29,.98,.08],vocal?.135:.205,vocal?C.skin:C.silver);
+    const shin=seated?null:beam(p,[s*.29,.98,.08],[s*.32,.32,.14],vocal?.13:.19,vocal?C.skin:C.silver);
     const bx=seated?s*.65:s*.32,bz=seated?.88:.14;
-    box(p,.36,.12,.57,C.white,bx,.08,bz+.08);oval(p,bx,.23,bz+.1,.19,.23,.32,C.silver);
-    cylinder(p,.15,.19,vocal?.52:.32,C.silver,bx,vocal?.36:.27,bz);
-    for(let i=0;i<4;i++){const y=.17+i*.075;beam(p,[bx-.11,y,bz+.235],[bx+.11,y+.06,bz+.235],.013,C.white);beam(p,[bx+.11,y,bz+.236],[bx-.11,y+.06,bz+.236],.013,C.white);}
+    const foot=group(p,bx,0,bz);foot.name=`foot-${s<0?'left':'right'}`;
+    box(foot,.36,.12,.57,C.white,0,.08,.08);oval(foot,0,.23,.1,.19,.23,.32,C.silver);
+    cylinder(foot,.15,.19,vocal?.52:.32,C.silver,0,vocal?.36:.27,0);
+    for(let i=0;i<4;i++){const y=.17+i*.075;beam(foot,[-.11,y,.235],[.11,y+.06,.235],.013,C.white);beam(foot,[.11,y,.236],[-.11,y+.06,.236],.013,C.white);}
+    if(!seated)rig.push({side:s,foot,thigh,shin,thighLength:thigh.geometry.parameters.height,shinLength:shin.geometry.parameters.height});
   }
+  return rig;
 }
 function guitar(p,bass){
   const g=group(p,-.42,1.68,.6);g.rotation.z=-.85;
@@ -122,7 +128,8 @@ function person(stage,role,x,z,y=1.35){
   const vocal=role==='vocal',bass=role==='bass',drummer=role==='drums';
   const root=group(stage,x,y,z),body=group(root);root.name=`band-${role}`;
   const color=mat(vocal?'#eb78a2':bass?'#3cae9f':drummer?'#d99a37':'#568bd8',.55,.28);
-  legs(body,vocal,drummer);const upper=group(body,0,drummer?-.65:0,0);clothes(upper,color,vocal,bass);
+  const legRig=legs(root,vocal,drummer);body.position.y=drummer?0:1.8;
+  const upper=group(body,0,drummer?-.65:-1.8,0);clothes(upper,color,vocal,bass);
   const f=face(upper,{female:vocal||bass,long:vocal,bob:bass,singing:vocal});
   const arms=[];
   if(vocal){arms.push(arm(upper,-1,color,[[ -.13,-.49,.12],[.19,.7,.49]]));arms.push(arm(upper,1,color,[[.1,-.62,0],[.06,-.48,.15]]));}
@@ -132,9 +139,9 @@ function person(stage,role,x,z,y=1.35){
     const mic=group(arms[0],.19,.78,.49);mic.rotation.z=-.23;cylinder(mic,.048,.06,.41,C.dark);sphere(mic,.095,C.silver,0,.25,0);
     for(let i=0;i<5;i++){const t=torus(mic,.087,.005,C.dark,0,.2+i*.022,0);t.rotation.x=Math.PI/2;}
   }
-  if(drummer){beam(arms[0],[.62,-.11,.45],[.14,.08,.7],.024,'#e8c790');beam(arms[1],[-.38,-.22,.43],[-.34,.19,.67],.024,'#e8c790');}
+  if(drummer)for(const [i,a]of arms.entries())beam(a.userData.hand,[0,-.04,.04],[i?-.16:.16,.12,.67],.024,'#e8c790');
   register(`band-${role}`,{vocal:'薇 · 主唱',bass:'芝 · 贝斯',guitar:'宇 · 吉他',drums:'德 · 鼓手'}[role],'sunset-stage',root,{kind:'musician',role,reference:`${{vocal:'wei-vocal',bass:'zhi-bass',guitar:'yu-guitar',drums:'de-drums'}[role]}.png`});
-  return {root,body,head:f.head,mouth:f.mouth,arms,role};
+  return {root,body,upper,head:f.head,mouth:f.mouth,arms,legs:legRig,role,home:root.position.clone()};
 }
 function drum(p,x,y,z,r,h,kick=false){
   const d=group(p,x,y,z);if(kick)d.rotation.x=Math.PI/2;
@@ -163,43 +170,6 @@ export function buildBand(stage){
   const members=[person(stage,'vocal',0,3.2),person(stage,'bass',-5,1.5),person(stage,'guitar',5,1.5),person(stage,'drums',0,-2.4,1.95)];
   const cymbals=drums(stage);
   return {members,cymbals,update(t,performance){
-    if(performance?.loaded){
-      updatePerformance(members,cymbals,t,performance);return;
-    }
-    for(let i=0;i<members.length;i++){
-      const m=members[i],beat=t*2.65+i*.9;m.body.rotation.z=Math.sin(beat)*.025;m.body.rotation.y=Math.sin(t*.75+i)*.045;
-      m.head.rotation.x=Math.sin(beat*1.1)*.045;m.head.rotation.z=Math.sin(beat*.65)*.035;
-      m.arms[0].rotation.x=Math.sin(beat*(i===3?3:2))*(i===3?.48:.065);m.arms[1].rotation.x=Math.sin(beat*(i===3?3:1.5)+Math.PI)*(i===3?.48:.045);
-      if(i===0)m.mouth.scale.y=.8+(Math.sin(t*7)+1)*.3;
-    }
-    for(let i=0;i<cymbals.length;i++){cymbals[i].rotation.x=Math.sin(t*17+i)*.026*(.5+.5*Math.sin(t*5+i));cymbals[i].rotation.z=Math.sin(t*13+i)*.018;}
+    updateChoreography(members,cymbals,t,performance);
   }};
-}
-
-function updatePerformance(members,cymbals,t,performance){
-  const value=n=>Number.isFinite(n)?Math.max(0,Math.min(1,n)):0;
-  const time=Number.isFinite(t)?t:0,active=performance.active===true;
-  const level=active?value(performance.level):0,bass=active?value(performance.bass):0;
-  const mid=active?value(performance.mid):0,high=active?value(performance.high):0,beat=active?value(performance.beat):0;
-  const energy=Math.max(level,bass*.8,mid*.65,high*.45),sway=energy*.8+beat*.2;
-  for(let i=0;i<members.length;i++){
-    const m=members[i],phase=time*2.65+i*.9;
-    m.body.rotation.z=Math.sin(phase)*(.045*sway);
-    m.body.rotation.y=Math.sin(time*.75+i)*(.07*energy);
-    m.head.rotation.x=Math.sin(phase*1.1)*(.065*sway);
-    m.head.rotation.z=Math.sin(phase*.65)*(.045*mid);
-    if(i===3){
-      m.arms[0].rotation.x=Math.sin(phase*3)*(.62*bass+.18*beat);
-      m.arms[1].rotation.x=Math.sin(phase*3+Math.PI)*(.48*high+.22*beat);
-    }else{
-      const strum=i===0?level:Math.max(mid,high*.7);
-      m.arms[0].rotation.x=Math.sin(phase*2)*(.2*strum+.07*beat);
-      m.arms[1].rotation.x=Math.sin(phase*1.5+Math.PI)*(.1*strum);
-    }
-    if(i===0)m.mouth.scale.y=.18+level*1.55;
-  }
-  for(let i=0;i<cymbals.length;i++){
-    cymbals[i].rotation.x=Math.sin(time*17+i)*.065*(high*.7+beat*.3);
-    cymbals[i].rotation.z=Math.sin(time*13+i)*.045*high;
-  }
 }
