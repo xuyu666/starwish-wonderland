@@ -22,3 +22,7 @@ body.at-stage .intro h1,body.at-stage .intro .edition,body.at-stage .intro>.prim
 @media(max-width:760px){#musicDialog{padding:26px 20px}#musicDialog h2{font-size:21px}.topbar{padding:0 12px}.top-actions{gap:0}.top-actions .icon-button{width:30px;height:34px}.brand b{font-size:17px;letter-spacing:1px}.brand small{letter-spacing:.5px}}
 
 .music-energy{display:flex;align-items:center;gap:12px;margin-top:14px;font-size:11px;color:#715243}.music-energy meter{flex:1;height:10px;accent-color:#d87f24}
+
+.exit-ride{min-height:44px;background:#a13b21;color:#fff1ce}.ride-button{min-height:44px}
+body.riding #ride{display:none}body.riding .intro h1,body.riding .intro .edition,body.riding .intro>.primary,body.riding .intro>.text-button{display:none}body.riding .intro::before{display:none}
+body.at-harbor .intro h1,body.at-harbor .intro .edition,body.at-harbor .intro>.primary,body.at-harbor .intro>.text-button{display:none}body.at-harbor .intro::before{display:none}
