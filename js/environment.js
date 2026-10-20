@@ -1,10 +1,11 @@
 import {THREE,mat,mesh,box,sphere,cylinder,cone,torus,beam,group,register,star} from './kit.js';
+import {createSea,createDistantScenery} from './backdrop.js';
 let seed=43;
 function rand(){seed=(seed*16807)%2147483647;return(seed-1)/2147483646;}
 const gold=mat(0xffc55d,.65,.25),green=0x239d68;
 export function buildEnvironment(world){
   const env=group(world), clouds=[],balloons=[],guests=[], lamps=[];
-  const sea=mesh(env,new THREE.CircleGeometry(500,128),mat(0x168fb8,.25,.24),0,-2.1,0);sea.rotation.x=-Math.PI/2;
+  const sea=createSea(env),distant=createDistantScenery(env);
   cylinder(env,65,63,2,0xdeaa74,0,-1.2,0,128);
   const grass=mat(0x269f4d,0,.9);
   const grassCanvas=document.createElement('canvas');grassCanvas.width=256;grassCanvas.height=256;const gc=grassCanvas.getContext('2d');gc.fillStyle='#ffffff';gc.fillRect(0,0,256,256);for(let i=0;i<6500;i++){gc.fillStyle=i%2?'#c2d9ad':'#e3efd1';gc.fillRect(rand()*256,rand()*256,1,2);}const grassTexture=new THREE.CanvasTexture(grassCanvas);grassTexture.wrapS=grassTexture.wrapT=THREE.RepeatWrapping;grassTexture.repeat.set(38,38);grass.map=grassTexture;
@@ -59,7 +60,7 @@ export function buildEnvironment(world){
     const batch=new THREE.InstancedMesh(geo,material,list.length);list.forEach((v,i)=>{dummy.position.set(v.x,v.y,v.z);dummy.scale.set(v.sx,v.sy,v.sz);dummy.updateMatrix();batch.setMatrixAt(i,dummy.matrix);batch.setColorAt(i,new THREE.Color(v.color));});batch.castShadow=kind==='leaves';batch.receiveShadow=true;env.add(batch);if(kind==='bulbs')env.userData.bulbMaterial=material;
     register('landscape-'+kind,kind,'全园',batch,{count:list.length,instanced:true});
   }
-  for(let i=0;i<12;i++){const angle=i/12*Math.PI*2;const g=group(env,Math.cos(angle)*125,54+rand()*12,Math.sin(angle)*125);g.scale.setScalar(.65);for(let j=0;j<4;j++){const m=sphere(g,3+rand()*3,mat(0xfff3e8,0,1),j*3,rand()*2,0,1,.6,.7);m.castShadow=false;}clouds.push(g);}
+  for(let i=0;i<12;i++){const angle=i/12*Math.PI*2;const g=group(env,Math.cos(angle)*125,54+rand()*12,Math.sin(angle)*125);g.scale.setScalar(.65);for(let j=0;j<4;j++){const m=sphere(g,3+rand()*3,mat(0xfff3e8,0,1),j*3,rand()*2,0,1,.6,.7);m.castShadow=false;}g.userData.cloudAngle=angle;g.userData.cloudHeight=g.position.y;clouds.push(g);}
   for(let i=0;i<3;i++){
     const g=group(env,[-42,42,7][i],33+i*6,[-44,-8,-55][i]);
     for(let j=0;j<8;j++){const geo=new THREE.SphereGeometry(3.3,12,20,j*Math.PI/4,Math.PI/4);const m=mesh(g,geo,mat(j%2?[0xff5b7d,0x37c8c0,0xad68de][i]:0xffdf8b));m.scale.y=1.25;}
@@ -71,5 +72,5 @@ export function buildEnvironment(world){
   }
   register('island','乐园岛屿','环境',env,{radius:65,trees:instances.trunks.length,flowerBeds,guests:20,lamps:40});
   const avatar=group(world,0,0,42);sphere(avatar,.32,0xf4c99e,0,1.82,0);sphere(avatar,.33,0x493251,0,2,-.05,1,.45,1);cylinder(avatar,.31,.4,.8,0xf55e83,0,1.2,0,16);const avatarLegs=[];for(const dx of [-.2,.2])avatarLegs.push(box(avatar,.23,.7,.27,0x36467d,dx,.43,0));box(avatar,.65,.7,.23,0xffca58,0,1.25,.34);
-  return {avatar,update(t,dt,moving=0){clouds.forEach((g,i)=>g.position.x+=dt*.18*(i%2?1:-1));balloons.forEach((g,i)=>g.position.y=33+i*6+Math.sin(t*.35+i)*1.2);guests.forEach(v=>{const a=v.a+t*v.speed;v.g.position.set(Math.cos(a)*v.r,0,8+Math.sin(a)*v.r);v.g.rotation.y=-a;v.legs.forEach((l,j)=>l.rotation.x=Math.sin(t*5+j*Math.PI)*.35);});avatarLegs.forEach((l,j)=>l.rotation.x=Math.sin(t*9+j*Math.PI)*.5*moving);},setNight(n){env.userData.bulbMaterial.emissiveIntensity=.5+n*2;}};
+  return {avatar,update(t,dt,moving=0){sea.material.userData.waterUniforms.time.value=t;distant.update(t);clouds.forEach((g,i)=>{const a=g.userData.cloudAngle+t*.0014*(i%2?1:-1);g.position.set(Math.cos(a)*125,g.userData.cloudHeight+Math.sin(t*.025+i)*1.4,Math.sin(a)*125);});balloons.forEach((g,i)=>g.position.y=33+i*6+Math.sin(t*.35+i)*1.2);guests.forEach(v=>{const a=v.a+t*v.speed;v.g.position.set(Math.cos(a)*v.r,0,8+Math.sin(a)*v.r);v.g.rotation.y=-a;v.legs.forEach((l,j)=>l.rotation.x=Math.sin(t*5+j*Math.PI)*.35);});avatarLegs.forEach((l,j)=>l.rotation.x=Math.sin(t*9+j*Math.PI)*.5*moving);},setNight(n){env.userData.bulbMaterial.emissiveIntensity=.5+n*2;}};
 }

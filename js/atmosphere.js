@@ -1,4 +1,5 @@
 import {THREE} from './kit.js';
+import {skyFragmentShader} from './sky-shader.js';
 
 function glowTexture(){
   const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
@@ -8,26 +9,13 @@ function glowTexture(){
 }
 
 export function createAtmosphere(scene,world){
-  const glow=glowTexture(),lights=[],lightSprites=[],pools=[],windows=[],bulbs=[],cloudMaterials=[];let seaMaterial=null;
+  const glow=glowTexture(),lights=[],lightSprites=[],pools=[],windows=[],bulbs=[],cloudMaterials=[];let seaMaterial=null,sea=null;
   const warm=new THREE.Color(0xffb95e),windowDay=new THREE.Color(0x53b9ec),windowNight=new THREE.Color(0xffd494);
-  const uniforms={night:{value:0},sunset:{value:0},time:{value:0}};
+  const uniforms={night:{value:0},sunset:{value:0},time:{value:0},horizon:{value:new THREE.Color(0xb5deee).convertLinearToSRGB()}};
   const sky=new THREE.Mesh(new THREE.SphereGeometry(560,32,20),new THREE.ShaderMaterial({
     uniforms,side:THREE.BackSide,depthWrite:false,fog:false,
     vertexShader:'varying vec3 direction;void main(){direction=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-    fragmentShader:`varying vec3 direction;uniform float night;uniform float sunset;uniform float time;
-      float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-      float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
-      void main(){vec3 d=normalize(direction);float h=smoothstep(-.1,.4,d.y);
-        vec3 day=mix(vec3(.92,.87,.76),vec3(.28,.67,.88),h);
-        vec3 dusk=mix(vec3(1.0,.62,.36),mix(vec3(.97,.49,.59),vec3(.41,.33,.64),h),smoothstep(-.02,.18,d.y));
-        vec3 midnight=mix(vec3(.22,.14,.25),vec3(.055,.065,.14),h);
-        vec3 color=mix(mix(day,dusk,sunset),midnight,night);
-        vec2 uv=vec2(atan(d.x,d.z)*6.0,d.y*26.0);float n=noise(uv*2.0+vec2(time*.008,0.0))*.6+noise(uv*4.0)*.28+noise(uv*8.0)*.12;
-        float band=smoothstep(.01,.12,d.y)*(1.0-smoothstep(.30,.64,d.y));float cloud=smoothstep(.35,.70,n+sin(d.y*50.0)*.06)*band;
-        color=mix(color,mix(vec3(1.0,.92,.80),vec3(1.0,.83,.73),sunset),cloud*(1.0-night)*.7);
-        vec2 stars=vec2(atan(d.x,d.z),asin(d.y))*130.0;float st=step(.9955,hash(floor(stars)))*(1.0-smoothstep(.04,.20,length(fract(stars)-.5)));
-        color+=st*night*(.6+.4*sin(time*.8+hash(floor(stars))*30.0))*smoothstep(.08,.35,d.y)*vec3(1.0,.86,.67);
-        gl_FragColor=vec4(color,1.0);}`
+    fragmentShader:skyFragmentShader
   }));sky.renderOrder=-20;sky.frustumCulled=false;scene.add(sky);
   const sunsetSun=new THREE.Group();scene.add(sunsetSun);sunsetSun.position.set(-22,27,-128);
   const sunDisk=new THREE.Mesh(new THREE.SphereGeometry(12,32,20),new THREE.MeshBasicMaterial({color:0xffdb88,toneMapped:false,transparent:true,depthWrite:false}));sunsetSun.add(sunDisk);
@@ -37,7 +25,7 @@ export function createAtmosphere(scene,world){
   for(let i=0;i<24;i++){const m=new THREE.Mesh(new THREE.PlaneGeometry(3.5+Math.sin(i*3)*2.0,.3+i*.015),new THREE.MeshBasicMaterial({color:0xffdb91,transparent:true,depthWrite:false,toneMapped:false}));m.rotation.x=-Math.PI/2;m.position.set(-22+Math.sin(i*1.7)*4,-1.96,-151+i*3.4);ripples.add(m);}
   world.traverse(node=>{
     if(!node.isMesh)return;
-    if(node.geometry.type==='CircleGeometry'&&node.geometry.parameters.radius===500)seaMaterial=node.material;
+    if(node.userData.isSea){sea=node;seaMaterial=node.material;}
     for(const material of Array.isArray(node.material)?node.material:[node.material]){
       if(material.color?.getHex()===0xfff3e8&&!cloudMaterials.includes(material))cloudMaterials.push(material);
       if(material.color?.getHex()===0x53b9ec&&!windows.includes(material))windows.push(material);
@@ -59,6 +47,8 @@ export function createAtmosphere(scene,world){
     const k=1-Math.exp(-dt*2.6);night=THREE.MathUtils.lerp(night,theme==='night'?1:0,k);sunset=THREE.MathUtils.lerp(sunset,theme==='sunset'?1:0,k);
     if(seaMaterial)seaMaterial.color.set(0x168fb8).lerp(new THREE.Color(0x9f8cbd),sunset*.6).lerp(new THREE.Color(0x28394b),night);
     cloudMaterials.forEach(m=>{m.color.set(0xfff3e8).lerp(new THREE.Color(0xffbcaf),sunset*.75).lerp(new THREE.Color(0x72617c),night*.8);m.emissive.set(0xffbb8a);m.emissiveIntensity=sunset*.22;});
+    uniforms.horizon.value.copy(scene.fog?.color??new THREE.Color(theme==='night'?0x25223e:theme==='sunset'?0xeeb59e:0xb5deee)).convertLinearToSRGB();
+    if(sea){sea.position.x=camera.position.x;sea.position.z=camera.position.z;seaMaterial.userData.waterUniforms.horizon.value.copy(uniforms.horizon.value);}
     uniforms.night.value=night;uniforms.sunset.value=sunset;uniforms.time.value=t;sky.position.copy(camera.position);
     const opacity=sunset*(1-night);sunsetSun.visible=opacity>.005;sunDisk.material.opacity=opacity;halo.material.opacity=opacity*.75;reflection.material.opacity=opacity*.55;ripples.visible=opacity>.005;
     ripples.children.forEach((m,i)=>{m.material.opacity=opacity*(.17+.18*Math.sin(t*.8+i*.7));m.scale.x=1+Math.sin(t*.45+i)*.16;});

@@ -26,3 +26,7 @@ body.at-stage .intro h1,body.at-stage .intro .edition,body.at-stage .intro>.prim
 .exit-ride{min-height:44px;background:#a13b21;color:#fff1ce}.ride-button{min-height:44px}
 body.riding #ride{display:none}body.riding .intro h1,body.riding .intro .edition,body.riding .intro>.primary,body.riding .intro>.text-button{display:none}body.riding .intro::before{display:none}
 body.at-harbor .intro h1,body.at-harbor .intro .edition,body.at-harbor .intro>.primary,body.at-harbor .intro>.text-button{display:none}body.at-harbor .intro::before{display:none}
+
+body.at-cruise .intro h1,body.at-cruise .intro .edition,body.at-cruise .intro>.primary,body.at-cruise .intro>.text-button{display:none}body.at-cruise .intro::before{display:none}body.at-cruise #ride{background:#a34427;color:#fff1ce}body.riding .touch-controls{display:none}
+.cruise-hud{position:absolute;left:40px;bottom:170px;max-width:260px;padding:14px 18px;border-radius:12px;background:#fff5e8ed;color:#573c35;pointer-events:none;box-shadow:0 4px 24px #55352b16}.cruise-hud strong{display:block;font-size:13px;font-weight:700}.cruise-hud span{display:block;font-size:11px;margin-top:6px}.cruise-hud[hidden]{display:none}
+@media(max-width:760px){body.at-cruise .intro{top:92px}.cruise-hud{left:20px;bottom:170px;width:170px;padding:12px}.cruise-hud strong{font-size:11px}.cruise-hud span{font-size:10px}.at-cruise .attraction-note{width:168px}.at-cruise .intro{width:170px}}

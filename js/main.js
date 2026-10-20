@@ -6,6 +6,7 @@ import {createNavigation} from './navigation.js';
 import {createAtmosphere} from './atmosphere.js';
 import {createFireworks} from './fireworks.js';
 import {buildSunsetStage} from './stage.js';
+import {buildSkyCruise} from './sky-cruise.js';
 import {setupSound} from './sound.js';
 const $=s=>document.querySelector(s),canvas=$('#scene');
 let toastTimer;
@@ -18,6 +19,7 @@ const zones=[
   {id:'harbor',name:'海盗港湾',symbol:'⚓',x:-35,z:-25,color:'#559eaa',description:'登上摇摆海盗船，随风帆一起荡向港湾。'},
   {id:'candy-town',name:'糖果小镇',symbol:'♧',x:-30,z:29,color:'#d869a3',description:'蛋糕屋顶与棒棒糖，甜蜜沿街发生。'},
   {id:'sunset-stage',name:'盛夏日落舞台',symbol:'♫',x:-46,z:-4,color:'#ee9c26',description:'四人乐队，在金色太阳下热烈开唱。'},
+  {id:'sky-cruise',name:'云海飞船',symbol:'✈',x:25,z:45,color:'#e78545',description:'登上金色观景艇，穿过云海俯瞰整座乐园。'},
   {id:'teacups',name:'星际花园',symbol:'♧',x:28,z:30,color:'#8065c5',description:'坐进星际茶杯，围着复古火箭打转。'}
 ];
 async function boot(){
@@ -29,25 +31,31 @@ async function boot(){
   const sun=new THREE.DirectionalLight(0xffe3ba,3.3);sun.position.set(-38,75,38);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-80,right:80,top:75,bottom:-75,near:1,far:210});sun.shadow.normalBias=.08;sun.shadow.bias=-.0003;scene.add(sun);
   const rim=new THREE.DirectionalLight(0xffa1cb,1.1);rim.position.set(25,35,-45);scene.add(rim);
   const world=new THREE.Group();scene.add(world);
-  const environment=buildEnvironment(world),architecture=buildArchitecture(world),rides=buildRides(world),stage=buildSunsetStage(world);
-  Object.assign(rides.seats,architecture.seats);
-  const nav=createNavigation(camera,canvas,environment.avatar,toast);
+  const environment=buildEnvironment(world),architecture=buildArchitecture(world),rides=buildRides(world),stage=buildSunsetStage(world),cruise=buildSkyCruise(world);
+  Object.assign(rides.seats,architecture.seats,cruise.seats);
+  const nav=createNavigation(camera,canvas,environment.avatar,toast,{onBoard(id){if(id==='sky-cruise')cruise.start();},onLeave(id){if(id==='sky-cruise'){cruise.stop();return new THREE.Vector3(25,0,54);}}});
   const atmosphere=createAtmosphere(scene,world),fireworks=createFireworks(scene);
   let selected=zones[0],paused=matchMedia('(prefers-reduced-motion: reduce)').matches,time=0,theme='day';
   $('#pause').textContent=paused?'▶':'Ⅱ';
-  function select(zone){selected=zone;nav.visit(zone);$('#zoneTitle').textContent=zone.name;$('#zoneDescription').textContent=zone.description;$('#zoneNumber').textContent=zone.symbol;$('#ride').hidden=!rides.seats[zone.id];$('#watchShow').hidden=zone.id!=='sunset-stage';document.body.classList.toggle('at-stage',zone.id==='sunset-stage');document.body.classList.toggle('at-harbor',zone.id==='harbor');document.querySelectorAll('#destinations button').forEach(b=>{b.classList.toggle('active',b.dataset.zone===zone.id);b.setAttribute('aria-pressed',String(b.dataset.zone===zone.id));});toast('已抵达 '+zone.name);}
+  function select(zone){selected=zone;nav.visit(zone);$('#zoneTitle').textContent=zone.name;$('#zoneDescription').textContent=zone.description;$('#zoneNumber').textContent=zone.symbol;$('#ride').hidden=!rides.seats[zone.id];$('#ride').textContent=zone.id==='sky-cruise'?'登船巡游 ↗':'乘坐体验 ↗';$('#watchShow').hidden=zone.id!=='sunset-stage';document.body.classList.toggle('at-stage',zone.id==='sunset-stage');document.body.classList.toggle('at-harbor',zone.id==='harbor');document.body.classList.toggle('at-cruise',zone.id==='sky-cruise');document.querySelectorAll('#destinations button').forEach(b=>{b.classList.toggle('active',b.dataset.zone===zone.id);b.setAttribute('aria-pressed',String(b.dataset.zone===zone.id));});toast('已抵达 '+zone.name);}
   zones.forEach((zone,i)=>{const b=document.createElement('button');b.dataset.zone=zone.id;b.innerHTML=`<span class="nav-symbol">${zone.symbol}</span>${zone.name}`;b.className=i===0?'active':'';b.setAttribute('aria-pressed',String(i===0));b.onclick=()=>select(zone);$('#destinations').append(b);});
-  $('#ride').onclick=()=>nav.ride(selected.id);
+  $('#ride').onclick=()=>{nav.ride(selected.id);if(selected.id==='sky-cruise'&&paused)toast('已登船 · 点击右侧 ▶ 继续动画，开始巡游');};
   $('#watchShow').onclick=()=>{nav.watchStage();void sound.startShow();toast('前排观演 · 拖拽换角度，滚轮看细节');};
   const presets={day:{sky:0xb5deee,hemi:1.45,sun:2.7,rim:.8,exposure:1.05,sunColor:0xffe3ba,label:'金色午后'},sunset:{sky:0xeeb59e,hemi:1.65,sun:1.95,rim:1.3,exposure:1.03,sunColor:0xffbc7a,label:'温柔夕阳'},night:{sky:0x25223e,hemi:.68,sun:.72,rim:.65,exposure:1.1,sunColor:0xffc482,label:'暖灯星夜'}};
   const current={sky:scene.background.clone(),hemi:1.45,sun:2.7,rim:.8,exposure:1.05,sunColor:new THREE.Color(0xffe3ba)};
   document.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{theme=b.dataset.day;document.querySelectorAll('[data-day]').forEach(n=>n.classList.toggle('active',n===b));$('#timeLabel').textContent=presets[theme].label;document.body.classList.toggle('night',theme==='night');if(theme==='sunset'&&nav.state.view==='overview'&&selected.id!=='sunset-stage'){nav.state.focus.set(0,5,0);nav.state.distance=165;nav.state.theta=.12;nav.state.phi=1.25;}toast(presets[theme].label);});
   $('#pause').onclick=()=>{paused=!paused;sound.syncPause(paused);$('#pause').textContent=paused?'▶':'Ⅱ';$('#pause').setAttribute('aria-label',paused?'继续场景动画':'暂停场景动画');toast(paused?'设施动画已暂停':'奇境继续上演');};
   $('#mapToggle').onclick=()=>{$('.map-panel').classList.toggle('collapsed');$('#mapToggle').textContent=$('.map-panel').classList.contains('collapsed')?'+':'−';};
-  const map=$('#minimap'),ctx=map.getContext('2d');
-  function drawMap(){const s=2.08,c=155;ctx.clearRect(0,0,310,310);ctx.fillStyle='#d4e7e5';ctx.beginPath();ctx.arc(c,c,145,0,Math.PI*2);ctx.fill();ctx.fillStyle='#bad395';ctx.beginPath();ctx.arc(c,c,133,0,Math.PI*2);ctx.fill();ctx.lineWidth=9;ctx.strokeStyle='#fff1d5';ctx.lineCap='round';for(const [a,b]of [[[0,52],[0,-24]],[[-48,4],[45,4]],[[-30,29],[28,30]],[[-30,29],[-35,-25]],[[28,30],[34,-24]]]){ctx.beginPath();ctx.moveTo(c+a[0]*s,c+a[1]*s);ctx.lineTo(c+b[0]*s,c+b[1]*s);ctx.stroke();}
+  const map=$('#minimap'),ctx=map.getContext('2d'),mapDirection=new THREE.Vector3();
+  const cruiseLabels={idle:'等待登船',launch:'离开码头 · 正在起飞',cruise:'云海巡游 · 自由环顾',landing:'返回码头 · 缓缓降落',complete:'已抵达码头'};
+  function updateCruiseHud(){
+    const visible=nav.state.ride==='sky-cruise';$('#cruiseHud').hidden=!visible;if(!visible)return;
+    const label=paused?'巡游已暂停':cruiseLabels[cruise.phase];if($('#cruisePhase').textContent!==label)$('#cruisePhase').textContent=label;
+    $('#cruiseDetails').textContent=cruise.phase==='complete'?'感谢同行 · 点击返回平台下船':Math.round(camera.position.y)+' 米观景高度 · 航程 '+Math.round(cruise.progress*100)+'%';
+  }
+  function drawMap(){updateCruiseHud();const s=2.08,c=155;ctx.clearRect(0,0,310,310);ctx.fillStyle='#d4e7e5';ctx.beginPath();ctx.arc(c,c,145,0,Math.PI*2);ctx.fill();ctx.fillStyle='#bad395';ctx.beginPath();ctx.arc(c,c,133,0,Math.PI*2);ctx.fill();ctx.lineWidth=9;ctx.strokeStyle='#fff1d5';ctx.lineCap='round';for(const [a,b]of [[[0,52],[0,-24]],[[-48,4],[45,4]],[[-30,29],[28,30]],[[-30,29],[-35,-25]],[[28,30],[34,-24]]]){ctx.beginPath();ctx.moveTo(c+a[0]*s,c+a[1]*s);ctx.lineTo(c+b[0]*s,c+b[1]*s);ctx.stroke();}
     for(const z of zones){ctx.fillStyle=z.color;ctx.strokeStyle=z===selected?'#49334f':'#fff6e4';ctx.lineWidth=z===selected?4:2;ctx.beginPath();ctx.arc(c+z.x*s,c+z.z*s,z.id==='castle'?15:12,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#49334f';ctx.font='bold 19px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(z.symbol,c+z.x*s,c+z.z*s);}
-    const p=nav.state.player;ctx.fillStyle='#b32d60';ctx.beginPath();ctx.arc(c+p.x*s,c+p.z*s,5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff8ed';ctx.lineWidth=2;ctx.stroke();}
+    const p=nav.getMapPosition();ctx.fillStyle='#b32d60';ctx.beginPath();ctx.arc(c+p.x*s,c+p.z*s,5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff8ed';ctx.lineWidth=2;ctx.stroke();if(nav.state.ride==='sky-cruise'){camera.getWorldDirection(mapDirection);ctx.save();ctx.translate(c+p.x*s,c+p.z*s);ctx.rotate(Math.atan2(mapDirection.x,-mapDirection.z));ctx.fillStyle='#a34427';ctx.strokeStyle='#fff3d7';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(7,7);ctx.lineTo(0,4);ctx.lineTo(-7,7);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();}}
   map.addEventListener('click',e=>{const r=map.getBoundingClientRect(),x=((e.clientX-r.left)/r.width*310-155)/2.08,z=((e.clientY-r.top)/r.height*310-155)/2.08;const nearest=[...zones].sort((a,b)=>Math.hypot(a.x-x,a.z-z)-Math.hypot(b.x-x,b.z-z))[0];select(nearest);});
   $('#help').onclick=()=>$('#guide').showModal();$('#concept').onclick=()=>$('#conceptDialog').showModal();document.querySelectorAll('dialog .close').forEach(b=>b.onclick=()=>b.closest('dialog').close());
   document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}}));
@@ -64,7 +72,7 @@ async function boot(){
   $('#fireworks').onclick=burst;
   let last=performance.now(),frames=0,mapTick=0,firePhase='idle';
   function animate(now){requestAnimationFrame(animate);const effectDt=Math.min((now-last)/1000,.2),dt=Math.min(effectDt,.05);last=now;if(!paused)time+=dt;
-    environment.update(time,paused?0:dt,nav.state.moving);architecture.update(time,dt);rides.update(time,dt);sound.update(dt);if(!paused)stage.update(time,theme,sound.performance);nav.update(dt,rides.seats);
+    cruise.update(time,paused?0:dt);environment.update(time,paused?0:dt,nav.state.moving);architecture.update(time,dt);rides.update(time,dt);sound.update(dt);if(!paused)stage.update(time,theme,sound.performance);nav.update(dt,rides.seats);
     const desired=presets[theme],lerp=1-Math.exp(-dt*3);current.sky.lerp(new THREE.Color(desired.sky),lerp);scene.background.copy(current.sky);scene.fog.color.copy(current.sky);for(const k of ['hemi','sun','rim','exposure'])current[k]=THREE.MathUtils.lerp(current[k],desired[k],lerp);hemi.intensity=current.hemi;sun.intensity=current.sun;rim.intensity=current.rim;renderer.toneMappingExposure=current.exposure;current.sunColor.lerp(new THREE.Color(desired.sunColor),lerp);sun.color.copy(current.sunColor);environment.setNight(theme==='night'?1:0);
     const night=theme==='night',dusk=theme==='sunset';
     hemi.color.lerp(new THREE.Color(night?0xffd4a2:dusk?0xffd9be:0xe9f5ff),lerp);hemi.groundColor.lerp(new THREE.Color(night?0x593c3b:dusk?0x926855:0x588052),lerp);
@@ -77,7 +85,7 @@ async function boot(){
   }
   window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();toast('图形上下文已中断，请刷新页面重新进入');});
-  window.starwish={renderer,scene,camera,nav,zones,assets,rides,stage,sound,atmosphere,fireworks,get time(){return time;},get paused(){return paused;},select,burst};
+  window.starwish={renderer,scene,camera,nav,zones,assets,rides,stage,cruise,sound,atmosphere,fireworks,get time(){return time;},get paused(){return paused;},select,burst};
   requestAnimationFrame(animate);
 }
 function assetCatalog(world){
